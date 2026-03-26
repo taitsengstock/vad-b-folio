@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { readSessions } from "@/lib/db";
 import CanvasClient from "./CanvasClient";
 
