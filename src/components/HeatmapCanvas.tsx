@@ -22,7 +22,9 @@ const HeatmapCanvas = forwardRef<HeatmapCanvasHandle, Props>(function HeatmapCan
   const pointsRef = useRef<Point[]>([]);
   const dwellTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dwellRef = useRef(0);
-  const sessionIdRef = useRef<string>(crypto.randomUUID());
+  const sessionIdRef = useRef<string>(
+    sessionStorage.getItem("sessionId") ?? crypto.randomUUID()
+  );
   const flushedUpToRef = useRef(0);
 
   // Draw all past sessions onto canvas
@@ -173,20 +175,24 @@ const HeatmapCanvas = forwardRef<HeatmapCanvasHandle, Props>(function HeatmapCan
   useImperativeHandle(ref, () => ({ addPoint, pushBreak }), [addPoint, pushBreak]);
 
 
-  // Create session record upfront, then flush points in chunks
+  // Create session record upfront (skip if resuming existing session)
   useEffect(() => {
-    const session: Session = {
-      id: sessionIdRef.current,
-      username,
-      color,
-      points: [],
-      createdAt: new Date().toISOString(),
-    };
-    fetch("/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(session),
-    });
+    const existing = sessionStorage.getItem("sessionId");
+    if (!existing) {
+      sessionStorage.setItem("sessionId", sessionIdRef.current);
+      const session: Session = {
+        id: sessionIdRef.current,
+        username,
+        color,
+        points: [],
+        createdAt: new Date().toISOString(),
+      };
+      fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(session),
+      });
+    }
   }, [username, color]);
 
   const flush = useCallback(() => {
