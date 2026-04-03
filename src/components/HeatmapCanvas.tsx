@@ -12,9 +12,9 @@ type Props = {
 export default function HeatmapCanvas({ username, color, pastSessions }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointsRef = useRef<Point[]>([]);
-  const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const dwellTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dwellRef = useRef(0);
+  const isDownRef = useRef(false);
   const sessionIdRef = useRef<string>(crypto.randomUUID());
   const flushedUpToRef = useRef(0);
 
@@ -30,6 +30,9 @@ export default function HeatmapCanvas({ username, color, pastSessions }: Props) 
       let i = 0;
       while (i < session.points.length) {
         const pt = session.points[i];
+
+        // Stroke break marker
+        if (pt.x < 0) { i++; continue; }
 
         // Dwell bleed: draw radial glow
         if (pt.dwell > 200) {
@@ -54,11 +57,10 @@ export default function HeatmapCanvas({ username, color, pastSessions }: Props) 
         ctx.globalAlpha = 0.6 + pt.pressure * 0.4;
         ctx.moveTo(pt.x * w, pt.y * h);
 
-        // Continue path until next dwell point or end
+        // Continue path until break, dwell point, or end
         let j = i + 1;
-        while (j < session.points.length && session.points[j].dwell <= 200) {
-          const next = session.points[j];
-          ctx.lineTo(next.x * w, next.y * h);
+        while (j < session.points.length && session.points[j].x >= 0 && session.points[j].dwell <= 200) {
+          ctx.lineTo(session.points[j].x * w, session.points[j].y * h);
           j++;
         }
         ctx.stroke();
@@ -88,6 +90,7 @@ export default function HeatmapCanvas({ username, color, pastSessions }: Props) 
 
   // Draw a single new point live
   const drawLivePoint = useCallback((pt: Point, prev: Point | null) => {
+    if (pt.x < 0) return; // stroke break marker
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -110,7 +113,7 @@ export default function HeatmapCanvas({ username, color, pastSessions }: Props) 
       return;
     }
 
-    if (!prev || prev.dwell > 200) return;
+    if (!prev || prev.x < 0 || prev.dwell > 200) return;
 
     ctx.save();
     ctx.strokeStyle = color;
@@ -156,27 +159,50 @@ export default function HeatmapCanvas({ username, color, pastSessions }: Props) 
     dwellRef.current = 0;
   }, []);
 
+  const pushBreak = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    pointsRef.current.push({ x: -1, y: -1, pressure: 0, dwell: 0 });
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const onPointerMove = (e: PointerEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
+      isDownRef.current = true;
+      canvas.setPointerCapture(e.pointerId);
       const pressure = e.pointerType === "mouse" ? 0.5 : (e.pressure || 0.5);
       addPoint(e.clientX, e.clientY, pressure, 0);
-      lastPosRef.current = { x: e.clientX, y: e.clientY };
+      startDwellTimer(e.clientX, e.clientY);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isDownRef.current) return;
+      const pressure = e.pointerType === "mouse" ? 0.5 : (e.pressure || 0.5);
+      addPoint(e.clientX, e.clientY, pressure, 0);
       stopDwellTimer();
       startDwellTimer(e.clientX, e.clientY);
     };
 
-    const onPointerLeave = () => stopDwellTimer();
-
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerleave", onPointerLeave);
-    return () => {
-      canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerleave", onPointerLeave);
+    const onPointerUp = () => {
+      if (!isDownRef.current) return;
+      isDownRef.current = false;
+      stopDwellTimer();
+      pushBreak();
     };
-  }, [addPoint, startDwellTimer, stopDwellTimer]);
+
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [addPoint, startDwellTimer, stopDwellTimer, pushBreak]);
 
   // Create session record upfront, then flush points in chunks
   useEffect(() => {

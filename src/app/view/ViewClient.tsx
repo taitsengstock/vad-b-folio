@@ -18,6 +18,9 @@ function drawSessions(ctx: CanvasRenderingContext2D, sessions: Session[], w: num
     while (i < session.points.length) {
       const pt: Point = session.points[i];
 
+      // Stroke break marker
+      if (pt.x < 0) { i++; continue; }
+
       if (pt.dwell > 200) {
         const radius = Math.min((pt.dwell / 1000) * 60, 120);
         const gradient = ctx.createRadialGradient(pt.x * w, pt.y * h, 0, pt.x * w, pt.y * h, radius);
@@ -37,9 +40,8 @@ function drawSessions(ctx: CanvasRenderingContext2D, sessions: Session[], w: num
       ctx.moveTo(pt.x * w, pt.y * h);
 
       let j = i + 1;
-      while (j < session.points.length && session.points[j].dwell <= 200) {
-        const next = session.points[j];
-        ctx.lineTo(next.x * w, next.y * h);
+      while (j < session.points.length && session.points[j].x >= 0 && session.points[j].dwell <= 200) {
+        ctx.lineTo(session.points[j].x * w, session.points[j].y * h);
         j++;
       }
       ctx.stroke();
