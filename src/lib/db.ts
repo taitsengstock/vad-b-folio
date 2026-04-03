@@ -36,6 +36,16 @@ export async function writeSession(session: Session): Promise<void> {
   `;
 }
 
+export async function getColorForUsername(username: string): Promise<string | null> {
+  const rows = await sql`SELECT color FROM sessions WHERE username = ${username} LIMIT 1`;
+  return rows[0]?.color ?? null;
+}
+
+export async function countDistinctUsers(): Promise<number> {
+  const rows = await sql`SELECT COUNT(DISTINCT username)::int AS count FROM sessions`;
+  return rows[0]?.count ?? 0;
+}
+
 export async function appendPoints(id: string, newPoints: Point[]): Promise<void> {
   await sql`
     UPDATE sessions SET points = points || ${JSON.stringify(newPoints)}::jsonb WHERE id = ${id}
