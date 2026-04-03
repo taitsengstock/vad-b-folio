@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Session, Point } from "@/lib/db";
 
 type Props = {
@@ -9,12 +9,19 @@ type Props = {
   pastSessions: Session[];
 };
 
-export default function HeatmapCanvas({ username, color, pastSessions }: Props) {
+export interface HeatmapCanvasHandle {
+  addPoint: (x: number, y: number, pressure: number, dwell?: number) => void;
+  pushBreak: () => void;
+}
+
+const HeatmapCanvas = forwardRef<HeatmapCanvasHandle, Props>(function HeatmapCanvas(
+  { username, color, pastSessions },
+  ref
+) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointsRef = useRef<Point[]>([]);
   const dwellTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dwellRef = useRef(0);
-  const isDownRef = useRef(false);
   const sessionIdRef = useRef<string>(crypto.randomUUID());
   const flushedUpToRef = useRef(0);
 
@@ -160,49 +167,11 @@ export default function HeatmapCanvas({ username, color, pastSessions }: Props) 
   }, []);
 
   const pushBreak = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     pointsRef.current.push({ x: -1, y: -1, pressure: 0, dwell: 0 });
   }, []);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  useImperativeHandle(ref, () => ({ addPoint, pushBreak }), [addPoint, pushBreak]);
 
-    const onPointerDown = (e: PointerEvent) => {
-      isDownRef.current = true;
-      canvas.setPointerCapture(e.pointerId);
-      const pressure = e.pointerType === "mouse" ? 0.5 : (e.pressure || 0.5);
-      addPoint(e.clientX, e.clientY, pressure, 0);
-      startDwellTimer(e.clientX, e.clientY);
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!isDownRef.current) return;
-      const pressure = e.pointerType === "mouse" ? 0.5 : (e.pressure || 0.5);
-      addPoint(e.clientX, e.clientY, pressure, 0);
-      stopDwellTimer();
-      startDwellTimer(e.clientX, e.clientY);
-    };
-
-    const onPointerUp = () => {
-      if (!isDownRef.current) return;
-      isDownRef.current = false;
-      stopDwellTimer();
-      pushBreak();
-    };
-
-    canvas.addEventListener("pointerdown", onPointerDown);
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerup", onPointerUp);
-    canvas.addEventListener("pointercancel", onPointerUp);
-    return () => {
-      canvas.removeEventListener("pointerdown", onPointerDown);
-      canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerup", onPointerUp);
-      canvas.removeEventListener("pointercancel", onPointerUp);
-    };
-  }, [addPoint, startDwellTimer, stopDwellTimer, pushBreak]);
 
   // Create session record upfront, then flush points in chunks
   useEffect(() => {
@@ -245,7 +214,9 @@ export default function HeatmapCanvas({ username, color, pastSessions }: Props) 
   return (
     <canvas
       ref={canvasRef}
-      className="block w-full h-full cursor-crosshair touch-none"
+      className="absolute inset-0 w-full h-full pointer-events-none opacity-0"
     />
   );
-}
+});
+
+export default HeatmapCanvas;

@@ -13,7 +13,9 @@ export default function Home() {
     const trimmed = username.trim();
     if (!trimmed) return;
     const color = usernameToColor(trimmed);
-    router.push(`/canvas?username=${encodeURIComponent(trimmed)}&color=${encodeURIComponent(color)}`);
+    sessionStorage.setItem("username", trimmed);
+    sessionStorage.setItem("color", color);
+    router.push("/canvas");
   };
 
   const previewColor = username.trim() ? usernameToColor(username.trim()) : "#888";
