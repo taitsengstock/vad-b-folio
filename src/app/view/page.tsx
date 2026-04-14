@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { readSessions } from "@/lib/db";
 import ViewClient from "./ViewClient";
+import QRCode from "./QRCode";
 
 export default async function ViewPage() {
   const sessions = await readSessions();
@@ -17,6 +18,7 @@ export default async function ViewPage() {
         ))}
       </div>
       <ViewClient sessions={sessions} />
+      <QRCode />
     </div>
   );
 }
