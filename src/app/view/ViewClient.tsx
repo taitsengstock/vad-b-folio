@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Session, Point } from "@/lib/db";
 
 type Props = { sessions: Session[] };
@@ -18,7 +18,6 @@ function drawSessions(ctx: CanvasRenderingContext2D, sessions: Session[], w: num
     while (i < session.points.length) {
       const pt: Point = session.points[i];
 
-      // Stroke break marker
       if (pt.x < 0) { i++; continue; }
 
       if (pt.dwell > 200) {
@@ -51,25 +50,51 @@ function drawSessions(ctx: CanvasRenderingContext2D, sessions: Session[], w: num
   }
 }
 
-export default function ViewClient({ sessions }: Props) {
+export default function ViewClient({ sessions: initialSessions }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [sessions, setSessions] = useState(initialSessions);
+  const sessionsRef = useRef(initialSessions);
 
-  useEffect(() => {
+  const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    drawSessions(ctx, sessionsRef.current, canvas.width, canvas.height);
+  }, []);
 
+  // Resize handler
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      drawSessions(ctx, sessions, canvas.width, canvas.height);
+      redraw();
     };
-
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
-  }, [sessions]);
+  }, [redraw]);
+
+  // Redraw when sessions update
+  useEffect(() => {
+    sessionsRef.current = sessions;
+    redraw();
+  }, [sessions, redraw]);
+
+  // Poll every 10s, pause when tab is hidden
+  useEffect(() => {
+    const fetchSessions = async () => {
+      if (document.hidden) return;
+      const res = await fetch("/api/sessions");
+      const data = await res.json();
+      setSessions(data);
+    };
+
+    const interval = setInterval(fetchSessions, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   return <canvas ref={canvasRef} className="block w-full h-full" />;
 }
